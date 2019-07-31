@@ -1,0 +1,115 @@
+''''
+
+---
+title: "2019_31_Video_Game"
+author: "Ryan Peiffer"
+date: "7/29/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+options(scipen = 999)
+```
+
+
+This week's Tidy Tuesday is about video game data from Steam! 
+First let's load the data into the workspace:
+
+
+```{r load data, message=FALSE}
+vg <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-07-30/video_games.csv")
+
+head(vg)
+
+```
+
+
+I definitely want to do something with the "owners" column but the current format is rough to deal with.
+I'm going to create a new column representing the min of each bucket. This is certainly not a great assumption
+but at least it gives me numbers to work with!
+
+
+```{r fix owners, warning=FALSE}
+vg <- vg %>% mutate(owners2 = as.numeric(gsub(",", "", substr(owners, 0, regexpr('\\.{2}', owners)-2))))
+
+```
+
+
+What games have been played the most total hours?
+
+
+```{r most played}
+
+most_played <- vg %>%
+    mutate(total_playtime = owners2 * average_playtime) %>%
+    arrange(desc(total_playtime)) %>%
+    slice(1:20)
+    
+ggplot(most_played, aes(reorder(game, total_playtime), total_playtime)) +
+    geom_bar(aes(fill = average_playtime), stat = "identity") +
+    coord_flip()
+
+```
+
+
+What games have made the most money (assuming no DLC purchases)?
+
+
+```{r highest grossing}
+
+most_money <- vg %>%
+    mutate(sales = owners2 * price) %>%
+    arrange(desc(sales)) %>%
+    slice(1:20)
+    
+ggplot(most_money, aes(reorder(game, sales), sales)) +
+    geom_bar(aes(fill = price), stat = "identity") +
+    coord_flip()
+```
+
+Let's see how much price influences total downloads.
+There are 200 unique prices in the data... I'm going to do some rounding to make it better to work with.
+
+```{r rounded prices}
+
+my_prices <- c(0, 0.49, 0.99, 4.99, 9.99, 14.99, 19.99, 49.99, 99.99, 1000)
+
+round_prices <- vg %>%
+    filter(!is.na(price)) %>%
+    mutate(round_price = cut(price, breaks = my_prices))
+
+price_buckets <- round_prices %>%
+    count(round_price)
+
+ggplot(price_buckets, aes(round_price, n)) +
+    geom_bar(stat = "identity")
+
+```
+
+Cool. Now let's see total owners and average owners per game by price bucket.
+
+```{r price influence}
+
+ggplot(round_prices, aes(round_price, owners2)) +
+    geom_bar(stat = "sum")
+
+#PUBG is throwing off the y axis... let's yank it out for now.
+round_prices2 <- filter(round_prices, game != "PLAYERUNKNOWN'S BATTLEGROUNDS")
+
+ggplot(round_prices2, aes(round_price, owners2)) +
+    geom_bar(stat = "sum")
+
+avg_players_by_price <- round_prices2 %>%
+    group_by(round_price) %>%
+    summarise(avg_players = mean(owners2))
+
+ggplot(avg_players_by_price, aes(round_price, avg_players)) + 
+    geom_bar(stat = "identity")
+
+```
+
+
+
+''''
