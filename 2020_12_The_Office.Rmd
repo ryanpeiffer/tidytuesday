@@ -1,0 +1,158 @@
+---
+title: "Do Viewers like Michael Scott?"
+author: "Ryan Peiffer"
+date: "3/31/2020"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Tidytuesday's 2020 week 12 challenge is on The Office! Everyone's favorite show
+featuring everyone's favorite character, Michael Scott. Or is he? I'd like to 
+take a look at how IMDB ratings relate to Michael's (verbal) presence.
+
+Let's get started!
+
+```{r, message=FALSE, warning=FALSE}
+#load packages and read in dataset
+library(tidyverse)
+library(gghighlight)
+library(schrute)
+
+raw_data <- schrute::theoffice
+
+raw_data
+```
+
+The Schrute package (great name) pulls in every line by every character in 
+every episode. Awesome! For my purposes, I'm going to want to know how many
+words each character is speaking. So let's manipulate this data.
+
+```{r}
+lines_manip <- raw_data %>%
+    select(season, episode, character, text) %>%
+    tidytext::unnest_tokens(word, text) %>%
+    mutate(ep_key = paste0("s", season, "e", episode)) %>%
+    add_count(character, ep_key) %>%
+    rename(char_words = n) %>%
+    add_count(ep_key) %>%
+    rename(ep_words = n)
+
+lines_sum <- lines_manip %>%
+    select(ep_key, character, char_words, ep_words) %>%
+    distinct()
+```
+
+The "lines_manip" dataset gives me a 570k row dataset on every word said during
+the show. Cool, but not that necessary for what I'm currently doing. "lines_sum"
+aggregates this up to be one row per character per episode, counting their
+total words in the episode, and the overall total words in the episode. Below you
+can see an example for season 1 episode 1.
+
+```{r, echo=FALSE}
+lines_sum %>%
+    filter(ep_key == "s1e1") %>%
+    arrange(desc(char_words)) 
+```
+
+
+Now that we have a basic dataset to work off of, let's start digging into the
+World's Greatest Boss (according to coffee mugs). I want to plot the IMDB rating
+for each epsiode compared to Michael's share of the total word count.
+
+```{r}
+episodes <- raw_data %>%
+    mutate(ep_key = paste0("s", season, "e", episode)) %>%
+    select(ep_key, episode_name, imdb_rating) %>%
+    unique()
+
+michael_words <- lines_sum %>%
+    filter(character == "Michael") 
+
+michael_ratings <- episodes %>%
+    left_join(michael_words, by = "ep_key") %>%
+    mutate(michael_share = char_words / ep_words) %>%
+    replace_na(list(michael_share = 0)) %>%
+    arrange(michael_share)
+
+ggplot(michael_ratings, aes(michael_share, imdb_rating)) +
+    geom_point() +
+    theme_bw()
+```
+
+Some things immediately stand out here. First question: what's up with the big
+line of dots on the left? Well, Michael is not in every episode! Let's take a step
+aside and see how the average rating changes based on Michael's presence.
+
+```{r}
+michael_presence <- michael_ratings %>%
+    mutate(michael_exists = if_else(michael_share == 0, "No", "Yes")) %>%
+    group_by(michael_exists) %>%
+    summarise(avg_rating = mean(imdb_rating))
+
+michael_presence
+```
+
+Looks like viewers do appreciate him being in the show! That's a good start.
+Now that we have that taken care of, I want to dial in on the episodes that feature
+Mike the Magic. Let's look at the same plot, but only showing episodes where Michael
+speaks at least 1 word.
+
+```{r, warning=FALSE}
+michael_ratings_v2 <- episodes %>%
+    left_join(michael_words, by = "ep_key") %>%
+    mutate(michael_share = char_words / ep_words) %>%
+    #replace_na(list(michael_share = 0))  >>> no longer replacing NAs!
+    arrange(michael_share)
+
+ggplot(michael_ratings_v2, aes(michael_share, imdb_rating)) +
+    geom_point() +
+    theme_bw()
+```
+
+Looks like there's a few outlier points. Let's see if we can figure out what's
+up with these four:
+
+```{r, warning=FALSE, echo=FALSE}
+#manually building vector of the episodes I want to highlight
+highlights <- c("s9e24", "s6e14", "s1e5", "s1e1")
+
+michael_ratings_highlight <- michael_ratings_v2 %>%
+    mutate(ep_label = paste0(ep_key, ": ", episode_name))
+
+ggplot(michael_ratings_highlight, aes(michael_share, imdb_rating)) +
+    geom_point() +
+    gghighlight(ep_key %in% highlights, label_key = ep_label) +
+    theme_bw()
+    
+```
+
+Aha! This makes some sense. Hardcore fans of the show may have even guessed what
+each of these data points are. Here's my brief insight into them:  
+
+* **s1e1: Pilot:** The Pilot episode featured *a lot* of Mr. Scott and, like many pilot episodes, writers didn't quite find the magic just yet.  
+* **s9e24: Finale:** Michael briefly returns for the finale, however viewers loved the finale for how well it celebrated *all* of their favorite characters.   
+* **s6e14: The Banker:** This is a classic montage episode, which viewers tend to not like very much.  
+* **s1e5: Basketball:** Not much to say here, other than Michael is heavily featured.
+
+Now that we have our outliers understood, let's see if there's any correlation between Michael's share of the script and the IMDB rating. I'm going to remove the above four outlier episodes for this.
+
+```{r}
+michael_reg_data <- michael_ratings_highlight %>%
+  filter(!ep_key %in% highlights) %>%
+  filter(!is.na(michael_share)) %>%
+  mutate(michael_share = michael_share * 100)
+  
+
+
+michael_reg <- lm(imdb_rating ~ michael_share, michael_reg_data)
+
+
+
+
+```
+
