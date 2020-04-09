@@ -79,7 +79,7 @@ michael_ratings <- episodes %>%
     replace_na(list(michael_share = 0)) %>%
     arrange(michael_share)
 
-ggplot(michael_ratings, aes(michael_share, imdb_rating)) +
+ggplot(michael_ratings, aes(x = michael_share, y = imdb_rating)) +
     geom_point() +
     theme_bw()
 ```
@@ -94,7 +94,9 @@ michael_presence <- michael_ratings %>%
     group_by(michael_exists) %>%
     summarise(avg_rating = mean(imdb_rating))
 
-michael_presence
+michael_presence %>%
+    knitr::kable(digits = 1, col.names = c("Michael Exists", "Avg Rating"),
+                 align = "c")
 ```
 
 Looks like viewers do appreciate him being in the show! That's a good start.
@@ -103,13 +105,13 @@ Mike the Magic. Let's look at the same plot, but only showing episodes where Mic
 speaks at least 1 word.
 
 ```{r, warning=FALSE}
-michael_ratings_v2 <- episodes %>%
+michael_ratings_no0 <- episodes %>%
     left_join(michael_words, by = "ep_key") %>%
     mutate(michael_share = char_words / ep_words) %>%
     #replace_na(list(michael_share = 0))  >>> no longer replacing NAs!
     arrange(michael_share)
 
-ggplot(michael_ratings_v2, aes(michael_share, imdb_rating)) +
+ggplot(michael_ratings_no0, aes(x = michael_share, y = imdb_rating)) +
     geom_point() +
     theme_bw()
 ```
@@ -121,10 +123,10 @@ up with these four:
 #manually building vector of the episodes I want to highlight
 highlights <- c("s9e24", "s6e14", "s1e5", "s1e1")
 
-michael_ratings_highlight <- michael_ratings_v2 %>%
+michael_ratings_highlight <- michael_ratings_no0 %>%
     mutate(ep_label = paste0(ep_key, ": ", episode_name))
 
-ggplot(michael_ratings_highlight, aes(michael_share, imdb_rating)) +
+ggplot(michael_ratings_highlight, aes(x = michael_share, y = imdb_rating)) +
     geom_point() +
     gghighlight(ep_key %in% highlights, label_key = ep_label) +
     theme_bw()
@@ -144,15 +146,41 @@ Now that we have our outliers understood, let's see if there's any correlation b
 ```{r}
 michael_reg_data <- michael_ratings_highlight %>%
   filter(!ep_key %in% highlights) %>%
-  filter(!is.na(michael_share)) %>%
-  mutate(michael_share = michael_share * 100)
+  filter(!is.na(michael_share))
   
-
-
-michael_reg <- lm(imdb_rating ~ michael_share, michael_reg_data)
-
-
-
+ggplot(michael_reg_data, aes(x = michael_share, y = imdb_rating)) +
+    geom_point() +
+    theme_bw() +
+    geom_smooth(method = "lm") 
 
 ```
+
+The regression line through these points does have a positive slope, however 
+the confidence bands clearly contain lines that go anywhere from flat to negative.
+
+This scatterplot is a bit too messy to really discern a trend, so let's look
+at deciles of Michael share instead.
+
+```{r}
+#Going back to use the full dataset of episodes, including ones Michael isn't in
+michael_decile <- michael_ratings %>%
+    mutate(decile = cut(michael_share, seq(0, 1, by = .1), right = FALSE))
+
+ggplot(michael_decile, aes(x = decile, y = imdb_rating)) +
+    geom_boxplot() +
+    theme_bw() +
+    labs(x = "Decile of Michael Share")
+
+```
+
+It does seem that the IMDB ratings generally trend upward as Michael speaks more,
+though it's not a perfect pattern. Once Michael starts to take over the episode by
+speaking up close to 50% or more of total words, the episodes tend to receive lower
+ratings.
+
+Does this align with your expectations? Do you wish Michael would
+speak **ALL** of the lines in an episode?
+
+Feel free to let me know what you think of this analysis at ryanpeiff@gmail.com.
+You can find the full RMarkdown code on my [github](https://github.com/ryanpeiffer/tidytuesday/blob/master/2020_12_The_Office.Rmd).
 
