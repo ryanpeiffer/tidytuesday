@@ -79,6 +79,7 @@ michael_ratings <- episodes %>%
     replace_na(list(michael_share = 0)) %>%
     arrange(michael_share)
 
+
 ggplot(michael_ratings, aes(x = michael_share, y = imdb_rating)) +
     geom_point() +
     theme_bw()
@@ -130,7 +131,6 @@ ggplot(michael_ratings_highlight, aes(x = michael_share, y = imdb_rating)) +
     geom_point() +
     gghighlight(ep_key %in% highlights, label_key = ep_label) +
     theme_bw()
-    
 ```
 
 Aha! This makes some sense. Hardcore fans of the show may have even guessed what
@@ -183,4 +183,3 @@ speak **ALL** of the lines in an episode?
 
 Feel free to let me know what you think of this analysis at ryanpeiff@gmail.com.
 You can find the full RMarkdown code on my [github](https://github.com/ryanpeiffer/tidytuesday/blob/master/2020_12_The_Office.Rmd).
-
